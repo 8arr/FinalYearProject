@@ -1,0 +1,15 @@
+[Unit]
+Description=Bus data collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/FinalYearProject
+EnvironmentFile=/home/ubuntu/FinalYearProject/.env
+ExecStart=/home/ubuntu/FinalYearProject/.venv/bin/python -m collector.run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
