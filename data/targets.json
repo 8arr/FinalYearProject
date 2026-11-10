@@ -1,0 +1,59 @@
+{
+  "main_stop_code": "5029",
+  "routes": [
+    {
+      "route_id": "1 41C c a",
+      "short_name": "41C"
+    }
+  ],
+  "stops": [
+    {
+      "stop_id": "8240DB005029",
+      "stop_code": "5029",
+      "name": "Boroimhe Laurels",
+      "lat": 53.445076,
+      "lon": -6.234542,
+      "metres_from_main": 0
+    },
+    {
+      "stop_id": "8240DB005031",
+      "stop_code": "5031",
+      "name": "Boroimhe Cherry",
+      "lat": 53.445199,
+      "lon": -6.234958,
+      "metres_from_main": 31
+    },
+    {
+      "stop_id": "8240DB005030",
+      "stop_code": "5030",
+      "name": "Boroimhe Maples",
+      "lat": 53.444564,
+      "lon": -6.231477,
+      "metres_from_main": 211
+    },
+    {
+      "stop_id": "8240DB005028",
+      "stop_code": "5028",
+      "name": "Boroimhe Maples",
+      "lat": 53.4446475315735,
+      "lon": -6.23106682512784,
+      "metres_from_main": 235
+    },
+    {
+      "stop_id": "8240DB006033",
+      "stop_code": "6033",
+      "name": "Cherry Park",
+      "lat": 53.447825,
+      "lon": -6.238071,
+      "metres_from_main": 385
+    },
+    {
+      "stop_id": "8240DB006015",
+      "stop_code": "6015",
+      "name": "Cherry Park",
+      "lat": 53.448336,
+      "lon": -6.238577,
+      "metres_from_main": 451
+    }
+  ]
+}
