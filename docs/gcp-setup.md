@@ -101,4 +101,8 @@ It is safe to copy while the collector is running because SQLite is in WAL mode,
 
 ## Costs
 
-The e2-micro in a US free tier region with a standard disk of up to 30GB is free. Set a budget alert (Billing, Budgets and alerts) at a few euro so you get an email if something is not covered.
+The console price estimate when creating the VM (about $8 a month) is the normal list price and does not take the free tier into account. The free tier is taken off your bill afterwards.
+
+It covers one e2-micro per month in us-west1, us-central1 or us-east1, plus 30GB of standard persistent disk (not balanced or SSD, so change the disk type when creating the VM). It does not cover the external IPv4 address, which is a few dollars a month. While the free trial credit lasts that is paid from the credit.
+
+Set a budget alert (Billing, Budgets and alerts) at a few euro so you get an email if the bill is higher than expected, and check Billing, Reports after a few days to see what is actually being charged.
