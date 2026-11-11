@@ -89,15 +89,65 @@ journalctl -u bus-collector -f
 
 To update after pushing code changes: `git pull && sudo systemctl restart bus-collector`.
 
-## 6. Backups
+## 6. Backups to OneDrive
 
-The database is a single file at `data/bus.db`. Copy it to your own machine now and then:
+This uses rclone on the VM to upload a copy of the database every night. The `.backup` command in `scripts/backup.sh` makes a safe copy even while the collector is writing.
+
+On the VM:
+
+```
+sudo apt install -y sqlite3
+curl https://rclone.org/install.sh | sudo bash
+```
+
+The VM has no browser, so the OneDrive login happens on your own computer. On your PC install rclone (on Windows: `winget install Rclone.Rclone`, then reopen the terminal) and run:
+
+```
+rclone authorize "onedrive"
+```
+
+Sign in to your Microsoft account in the browser window that opens. The terminal then prints a block of text starting with `{"access_token"`. Copy it.
+
+Back on the VM run `rclone config` and answer:
+
+1. `n` for new remote
+2. name: `onedrive`
+3. storage: type `onedrive` (pick it from the list by number)
+4. client_id and client_secret: press Enter to leave blank
+5. region: `1` (Microsoft Cloud Global)
+6. edit advanced config: `n`
+7. use web browser to authenticate: `n`
+8. paste the token block from your PC
+9. config type: `1` (OneDrive Personal or Business, whichever your account is), then pick the drive it lists
+10. `y` to confirm, then `q`
+
+Check it works:
+
+```
+rclone lsd onedrive:
+./scripts/backup.sh
+rclone ls onedrive:fyp-backups
+```
+
+Then run it every night at 03:00 with cron:
+
+```
+crontab -e
+```
+
+and add this line at the bottom (change the path if your username is not the same):
+
+```
+0 3 * * * /home/YOUR_USERNAME/FinalYearProject/scripts/backup.sh >> /tmp/backup.log 2>&1
+```
+
+The files appear in a `fyp-backups` folder in your OneDrive, one gzipped database per night. To open one, unzip it and open it with any SQLite tool.
+
+If you would rather not use rclone, you can pull the file to your PC by hand instead:
 
 ```
 gcloud compute scp bus-collector:~/FinalYearProject/data/bus.db . --zone=us-central1-a
 ```
-
-It is safe to copy while the collector is running because SQLite is in WAL mode, but grab the `-wal` file too, or stop the service briefly first. A disk snapshot (Compute Engine, Snapshots) is also an easy extra backup.
 
 ## Costs
 
