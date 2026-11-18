@@ -22,9 +22,13 @@ def api_key():
     return key
 
 
-def load_targets():
+def load_targets_raw():
     with open(TARGETS_PATH) as f:
-        t = json.load(f)
+        return json.load(f)
+
+
+def load_targets():
+    t = load_targets_raw()
     route_ids = {r["route_id"] for r in t["routes"]}
     stops = {s["stop_id"]: s for s in t["stops"]}
     return route_ids, stops
