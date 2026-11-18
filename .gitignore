@@ -6,3 +6,4 @@ data/*.db
 data/*.db-*
 .pytest_cache/
 results.json
+report/
