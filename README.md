@@ -9,6 +9,8 @@ Bus arrival time prediction for the 41C in Swords, Co. Dublin. The idea is to ta
 - `scripts/status.py` shows how much has been collected
 - `bus/` works out real arrival times, compares a correction model against TFI, checks feed health, estimates from history when TFI is down and has the review page
 - `scripts/run_pipeline.py` runs all the checks in order, see `docs/testing.md`
+- `scripts/data_overview.py` first look at a collected database, step by step guide in `docs/looking-at-the-data.md`
+- `report/` proposal, interim report and project plan (markdown and Word)
 - `deploy/` systemd unit for running the collector on a VM
 - `docs/gcp-setup.md` how to get it running on Google Cloud
 
