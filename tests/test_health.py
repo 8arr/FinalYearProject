@@ -106,3 +106,24 @@ def test_database_check_notices_gaps_and_failed_polls():
 def test_empty_database_is_an_error():
     issues, _ = health.check_database(db.connect(":memory:"), now=NOW)
     assert health.has_errors(issues)
+
+
+def test_filter_that_stopped_matching_is_an_error():
+    conn = db.connect(":memory:")
+    for t in range(0, 3 * 86400, 600):
+        db.log_poll(conn, t, "trip_updates", True)
+    conn.execute("INSERT INTO trip_updates (polled_at, trip_id, stop_id, arrival_time) VALUES (100,'t','s',200)")
+    issues, stats = health.check_database(conn, now=3 * 86400)
+    assert health.has_errors(issues)
+    assert "not matching" in texts(issues)
+    assert stats["rows_last_24h"] == 0
+
+
+def test_feed_without_clock_times_needs_the_timetable():
+    conn = db.connect(":memory:")
+    for t in range(0, 600, 60):
+        db.log_poll(conn, t, "trip_updates", True)
+    conn.execute("INSERT INTO trip_updates (polled_at, trip_id, stop_id, arrival_delay) VALUES (100,'t','s',30)")
+    assert "load_schedule" in texts(health.check_database(conn, now=700)[0])
+    conn.execute("INSERT INTO schedule (trip_id, stop_id, arrival_s) VALUES ('t','s',1000)")
+    assert "load_schedule" not in texts(health.check_database(conn, now=700)[0])

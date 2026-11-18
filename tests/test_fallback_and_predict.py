@@ -93,3 +93,17 @@ def test_model_only_adjusts_buses_in_its_range():
     assert near.estimates[0].time == NOW + 300
     assert far.estimates[0].time == NOW + 1800 + 120
     assert far.estimates[0].tfi_time == NOW + 1800
+
+
+def test_live_feed_with_delays_but_no_clock_times_uses_the_timetable():
+    from bus import schedule
+    msg = trip_feed()
+    stu = msg.entity[0].trip_update.stop_time_update[0]
+    stu.arrival.ClearField("time")
+    stu.arrival.delay = 90
+    msg.entity[0].trip_update.trip.trip_id = "t0"
+    msg.entity[0].trip_update.trip.start_date = "20270115"
+    scheduled = NOW + 510 - schedule.service_day_start("20270115")
+    result = predict.estimate_next("s", lambda: msg, no_history, now=NOW, schedule={("t0", "s"): scheduled})
+    assert result.source == "tfi"
+    assert result.estimates[0].time == NOW + 600

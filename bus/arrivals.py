@@ -6,14 +6,21 @@ reconstructed afterwards. Two methods are used so they can be compared:
 gps   the bus position is interpolated between polls and the time it was
       closest to the stop is used (as long as that is within `radius` metres)
 feed  the time the stop disappeared from the feed, minus a minute
+
+On the real data the feed method turned out to be unreliable, TFI keeps a
+stop in the list for 10 to 45 minutes after the bus has gone, so gps is
+the one used as the truth and feed is kept as a cross check.
 """
 from collections import defaultdict
 from dataclasses import dataclass
 
+from . import schedule as schedule_mod
 from .geo import closest_on_segment, distance_m
+from .health import IRELAND
 
 RADIUS_M = 25
 MAX_GPS_GAP_S = 180
+MAX_SPEED_MS = 40  # about 145 km/h, faster than this between two fixes is a glitch
 FEED_OFFSET_S = 60
 # if the stop vanished while the bus was still further away than this
 # it was probably cancelled or dropped from the feed, not a real arrival
@@ -29,12 +36,24 @@ class Arrival:
     gps_time: float = None
     feed_time: float = None
 
-    def actual(self, truth="best"):
-        if truth == "gps":
-            return self.gps_time
-        if truth == "feed":
-            return self.feed_time
-        return self.gps_time if self.gps_time is not None else self.feed_time
+    def actual(self, truth="gps"):
+        return self.feed_time if truth == "feed" else self.gps_time
+
+
+def clean_track(points):
+    """Drops glitchy fixes (outside Ireland, or a jump no bus could make)."""
+    south, north, west, east = IRELAND
+    kept = []
+    for t, lat, lon in points:
+        if not (south <= lat <= north and west <= lon <= east):
+            continue
+        if kept:
+            pt, plat, plon = kept[-1]
+            moved = distance_m(plat, plon, lat, lon)
+            if (t <= pt and moved > 50) or (t > pt and moved / (t - pt) > MAX_SPEED_MS):
+                continue
+        kept.append((t, lat, lon))
+    return kept
 
 
 def gps_arrival(points, stop, radius=RADIUS_M, max_gap=MAX_GPS_GAP_S):
@@ -79,7 +98,7 @@ def build_arrivals(conn, stops, interval=60, radius=RADIUS_M, since=None):
     """stops: dict of stop_id to {lat, lon}. Returns a list of Arrival."""
     marks = ",".join("?" * len(stops))
     sql = (
-        "SELECT trip_id, start_date, start_time, stop_id, polled_at, arrival_time"
+        "SELECT trip_id, start_date, start_time, stop_id, polled_at, arrival_time, arrival_delay"
         f" FROM trip_updates WHERE stop_id IN ({marks})"
     )
     args = list(stops)
@@ -88,8 +107,10 @@ def build_arrivals(conn, stops, interval=60, radius=RADIUS_M, since=None):
         args.append(since)
     sql += " ORDER BY polled_at"
 
+    sched = schedule_mod.load(conn)
     seen = {}
-    for trip_id, start_date, start_time, stop_id, polled_at, arr in conn.execute(sql, args):
+    for trip_id, start_date, start_time, stop_id, polled_at, arr, delay in conn.execute(sql, args):
+        arr = schedule_mod.predicted_time(arr, delay, start_date, sched.get((trip_id, stop_id)))
         key = (trip_id, start_date, stop_id)
         if key not in seen:
             seen[key] = {"start_time": start_time, "last": polled_at, "due": arr}
@@ -109,7 +130,7 @@ def build_arrivals(conn, stops, interval=60, radius=RADIUS_M, since=None):
     arrivals = []
     for (trip_id, start_date, stop_id), info in seen.items():
         stop = (stops[stop_id]["lat"], stops[stop_id]["lon"])
-        pts = sorted(set(tracks.get((trip_id, start_date), [])))
+        pts = clean_track(sorted(set(tracks.get((trip_id, start_date), []))))
         nxt = _first_after(good_polls, info["last"])
         arrivals.append(Arrival(
             trip_id=trip_id,

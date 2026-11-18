@@ -82,3 +82,14 @@ def test_model_predictions_are_epoch_times_near_tfi(sim, stops):
     pred = CorrectionModel().fit(samples).predict(samples[:5])
     for p, s in zip(pred, samples[:5]):
         assert abs(p - s["tfi_time"]) < 15 * 60
+
+
+def test_delay_only_feed_gives_the_same_results_as_one_with_clock_times():
+    from tests.conftest import STOPS, make_db
+    plain, _ = make_db(days=10, seed=5)
+    delays, _ = make_db(days=10, seed=5, delay_only=True)
+    assert delays.execute("SELECT COUNT(arrival_time) FROM trip_updates").fetchone()[0] == 0
+    a = evaluate.run(plain, STOPS, 30)
+    b = evaluate.run(delays, STOPS, 30)
+    assert a["tfi"] == b["tfi"]
+    assert a["model"]["mae_min"] == pytest.approx(b["model"]["mae_min"])

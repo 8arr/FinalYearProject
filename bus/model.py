@@ -72,7 +72,7 @@ def main():
     ap = argparse.ArgumentParser(description="train on everything in the database and save the model")
     ap.add_argument("--db", default=config.DB_PATH)
     ap.add_argument("--horizon", type=int, default=30)
-    ap.add_argument("--truth", default="best", choices=["gps", "feed", "best"])
+    ap.add_argument("--truth", default="gps", choices=["gps", "feed"])
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 

@@ -108,7 +108,7 @@ def feature_check(samples, min_samples=30):
     return out
 
 
-def run(conn, stops, horizon, truth="best", interval=60):
+def run(conn, stops, horizon, truth="gps", interval=60):
     arrivals = build_arrivals(conn, stops, interval=interval)
     samples = build_samples(conn, arrivals, list(stops), horizon, truth)
     result = compare(samples)
@@ -150,7 +150,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=config.DB_PATH)
     ap.add_argument("--horizon", type=int, nargs="+", default=[30, 60])
-    ap.add_argument("--truth", default="best", choices=["gps", "feed", "best"])
+    ap.add_argument("--truth", default="gps", choices=["gps", "feed"])
     ap.add_argument("--json", help="also write the results to this file")
     args = ap.parse_args()
 

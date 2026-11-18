@@ -60,7 +60,7 @@ def _reviewed_keys(conn, horizon):
         "SELECT trip_id, start_date, stop_id FROM reviews WHERE horizon_min = ?", (horizon,))}
 
 
-def build_cases(conn, stops, horizon, truth="best", limit=40, seed=0):
+def build_cases(conn, stops, horizon, truth="gps", limit=40, seed=0):
     """Test-set arrivals with TFI and model predictions, in random order."""
     ensure_table(conn)
     arrivals = build_arrivals(conn, stops)
@@ -230,7 +230,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=config.DB_PATH)
     ap.add_argument("--horizon", type=int, default=30)
-    ap.add_argument("--truth", default="best", choices=["gps", "feed", "best"])
+    ap.add_argument("--truth", default="gps", choices=["gps", "feed"])
     ap.add_argument("--cases", type=int, default=40)
     ap.add_argument("--port", type=int, default=8000)
     args = ap.parse_args()

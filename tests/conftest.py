@@ -18,6 +18,12 @@ def make_db(**kwargs):
     return conn, truth
 
 
+@pytest.fixture(autouse=True)
+def no_retry_waiting(monkeypatch):
+    """The feed fetch waits a few seconds between retries, not in tests."""
+    monkeypatch.setattr("collector.feeds.time.sleep", lambda s: None)
+
+
 @pytest.fixture(scope="session")
 def sim():
     """Two weeks of data where hour of day and rain really do change delays."""

@@ -32,7 +32,7 @@ def _seconds_into_day(epoch):
     return dt.hour * 3600 + dt.minute * 60 + dt.second
 
 
-def typical_times(arrivals, stop_id, now, truth="best", lookback_days=LOOKBACK_DAYS):
+def typical_times(arrivals, stop_id, now, truth="gps", lookback_days=LOOKBACK_DAYS):
     """{(day type, timetable slot): [seconds into the day, ...]} from past arrivals."""
     cutoff = now - lookback_days * 86400
     groups = defaultdict(list)
@@ -47,7 +47,7 @@ def typical_times(arrivals, stop_id, now, truth="best", lookback_days=LOOKBACK_D
     return groups
 
 
-def estimate_from_history(arrivals, stop_id, now, n=3, truth="best"):
+def estimate_from_history(arrivals, stop_id, now, n=3, truth="gps"):
     groups = typical_times(arrivals, stop_id, now, truth)
     today = datetime.fromtimestamp(now, TZ).replace(hour=0, minute=0, second=0, microsecond=0)
     found = []
@@ -69,7 +69,7 @@ def estimate_from_history(arrivals, stop_id, now, n=3, truth="best"):
     return found[:n]
 
 
-def backtest(arrivals, stop_id, truth="best"):
+def backtest(arrivals, stop_id, truth="gps"):
     """How good would the fallback have been on a recent day?
 
     Takes the latest day that has enough earlier days of the same kind,

@@ -132,6 +132,22 @@ def check_database(conn, interval=60, now=None, window_s=24 * 3600):
     if bad_delays:
         issues.append(Issue("warning", f"{bad_delays} stored delays are over {MAX_DELAY_S // 3600} hours"))
 
-    if conn.execute("SELECT COUNT(*) FROM trip_updates").fetchone()[0] == 0:
+    stored = conn.execute("SELECT COUNT(*), COUNT(arrival_time) FROM trip_updates").fetchone()
+    if stored[0] == 0:
         issues.append(Issue("error", "no trip updates stored"))
+        return issues, stats
+
+    # the feed mostly sends delays, so without the timetable there is no predicted clock time
+    stats["share_with_clock_time"] = stored[1] / stored[0]
+    if stored[1] / stored[0] < 0.5 and conn.execute("SELECT COUNT(*) FROM schedule").fetchone()[0] == 0:
+        issues.append(Issue("error", "the feed has no clock times and the timetable is not loaded, "
+                                     "run scripts/load_schedule.py"))
+
+    if ok_times:
+        window_start = ok_times[-1] - window_s
+        recent = conn.execute("SELECT COUNT(*) FROM trip_updates WHERE polled_at > ?", (window_start,)).fetchone()[0]
+        stats["rows_last_24h"] = recent
+        if recent == 0 and ok_times[-1] - ok_times[0] > window_s:
+            issues.append(Issue("error", "polls succeeded but no trip updates were stored in the last 24 hours, "
+                                         "the route or stop filter is probably not matching any more"))
     return issues, stats

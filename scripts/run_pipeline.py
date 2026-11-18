@@ -22,7 +22,6 @@ from bus import evaluate, fallback, health, review, simulate  # noqa: E402
 from bus.arrivals import build_arrivals  # noqa: E402
 
 MIN_ARRIVALS = 20
-MAX_METHOD_DISAGREEMENT_S = 180
 MAX_FALLBACK_MAE_MIN = 10
 MIN_REVIEWS_FOR_GATE = 10
 MIN_AGREEMENT = 0.8
@@ -78,14 +77,17 @@ def stage_live_feed(ctx):
 
 def stage_arrivals(ctx):
     ctx.arrivals = build_arrivals(ctx.conn, ctx.stops)
-    both = [a for a in ctx.arrivals if a.gps_time is not None and a.feed_time is not None]
-    if len(both) < MIN_ARRIVALS:
-        return SKIP, f"only {len(both)} arrivals found by both methods, need {MIN_ARRIVALS}"
-    diffs = sorted(abs(a.gps_time - a.feed_time) for a in both)
-    median = diffs[len(diffs) // 2]
-    detail = (f"{len(ctx.arrivals)} arrivals, {len(both)} found by both methods, "
-              f"median difference between methods {median:.0f}s")
-    return (PASS if median <= MAX_METHOD_DISAGREEMENT_S else FAIL), detail
+    gps = [a for a in ctx.arrivals if a.gps_time is not None]
+    if len(gps) < MIN_ARRIVALS:
+        return SKIP, (f"only {len(gps)} of {len(ctx.arrivals)} trips at the stops have a GPS arrival, "
+                      f"need {MIN_ARRIVALS}")
+    both = sorted(a.feed_time - a.gps_time for a in gps if a.feed_time is not None)
+    detail = (f"{len(gps)} of {len(ctx.arrivals)} trips at the stops have a GPS arrival "
+              f"({len(gps) / len(ctx.arrivals):.0%})")
+    if both:
+        detail += (f"; the feed method (cross check only) is a median {both[len(both) // 2]:.0f}s "
+                   f"later over {len(both)} trips")
+    return PASS, detail
 
 
 def stage_accuracy(ctx):
@@ -154,7 +156,7 @@ def main():
     if args.sim:
         path = os.path.join(tempfile.mkdtemp(), "sim.db")
         conn = db.connect(path)
-        simulate.simulate(conn, days=14)
+        simulate.simulate(conn, days=14, delay_only=True)
         stops = {simulate.STOP["stop_id"]: simulate.STOP}
         route_ids = {simulate.ROUTE_ID}
         args.now = max(r[0] for r in conn.execute("SELECT polled_at FROM polls")) + 60

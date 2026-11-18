@@ -9,9 +9,10 @@ arrival time would leak into the inputs.
 from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
-TZ = ZoneInfo("Europe/Dublin")
+from . import schedule as schedule_mod
+from .schedule import TZ
+
 POLL_TOLERANCE_S = 120
 WEATHER_MAX_AGE_S = 30 * 60
 
@@ -27,13 +28,15 @@ def is_weekend(epoch):
 
 def _load_predictions(conn, stop_ids):
     marks = ",".join("?" * len(stop_ids))
+    sched = schedule_mod.load(conn)
     rows = conn.execute(
         "SELECT trip_id, start_date, stop_id, polled_at, arrival_time, arrival_delay"
-        f" FROM trip_updates WHERE stop_id IN ({marks}) AND arrival_time IS NOT NULL"
-        " ORDER BY polled_at", list(stop_ids))
+        f" FROM trip_updates WHERE stop_id IN ({marks}) ORDER BY polled_at", list(stop_ids))
     preds = defaultdict(list)
     for trip_id, start_date, stop_id, polled_at, arrival_time, delay in rows:
-        preds[(trip_id, start_date, stop_id)].append((polled_at, arrival_time, delay))
+        due = schedule_mod.predicted_time(arrival_time, delay, start_date, sched.get((trip_id, stop_id)))
+        if due is not None:
+            preds[(trip_id, start_date, stop_id)].append((polled_at, due, delay))
     return preds
 
 
@@ -50,7 +53,7 @@ def _weather_at(times, rows, t):
     return rows[i][1] or 0.0, rows[i][2] or 0.0
 
 
-def build_samples(conn, arrivals, stop_ids, horizon_min, truth="best"):
+def build_samples(conn, arrivals, stop_ids, horizon_min, truth="gps"):
     """One sample per arrival that has both a known arrival time and a
     TFI prediction from about `horizon_min` minutes earlier."""
     preds = _load_predictions(conn, stop_ids)

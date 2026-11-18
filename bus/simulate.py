@@ -15,6 +15,7 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from collector import db
+from .schedule import service_day_start
 
 TZ = ZoneInfo("Europe/Dublin")
 STOP = {"stop_id": "8240DB005029", "stop_code": "5029", "name": "Boroimhe Laurels",
@@ -41,13 +42,20 @@ def true_delay(rng, hour, weekend, raining, effects):
     return delay + rng.gauss(0, 45)
 
 
-def simulate(conn, days=10, seed=1, first_day=date(2026, 11, 2), effects=True):
-    """Fills the tables and returns {(trip_id, start_date): true arrival epoch}."""
+def simulate(conn, days=10, seed=1, first_day=date(2026, 11, 2), effects=True, delay_only=False,
+             linger_choices=(0, 60, 120, 180)):
+    """Fills the tables and returns {(trip_id, start_date): true arrival epoch}.
+
+    delay_only copies the real feed, which mostly sends delays and no clock
+    times, with the timetable in the schedule table instead. linger_choices
+    are how many seconds the stop stays in the feed after the bus has gone,
+    on the real feed it was 10 to 45 minutes.
+    """
     rng = random.Random(seed)
     lat0, lon0 = STOP["lat"], STOP["lon"]
     road_lon = lon0 - 8 / (111_320 * math.cos(math.radians(lat0)))
     truth = {}
-    trip_rows, vehicle_rows, polls, weather = [], [], [], []
+    trip_rows, vehicle_rows, polls, weather, schedule = [], [], [], [], []
 
     for d in range(days):
         day = first_day + timedelta(days=d)
@@ -78,7 +86,8 @@ def simulate(conn, days=10, seed=1, first_day=date(2026, 11, 2), effects=True):
             trip_id = f"sim_{start_date}_{slot}"
             start_time = datetime.fromtimestamp(scheduled - 35 * 60, TZ).strftime("%H:%M:%S")
             truth[(trip_id, start_date)] = actual
-            linger = rng.choice([0, 60, 120, 180])
+            schedule.append((trip_id, STOP["stop_id"], 30, round(scheduled - service_day_start(start_date))))
+            linger = rng.choice(linger_choices)
 
             t = (int(actual) - 75 * 60) // POLL_SECONDS * POLL_SECONDS + 7
             while t <= actual + linger:
@@ -91,7 +100,7 @@ def simulate(conn, days=10, seed=1, first_day=date(2026, 11, 2), effects=True):
                     "polled_at": t, "trip_id": trip_id, "route_id": ROUTE_ID, "direction_id": 0,
                     "start_date": start_date, "start_time": start_time, "vehicle_id": f"bus_{slot}",
                     "stop_id": STOP["stop_id"], "stop_sequence": 30,
-                    "arrival_time": scheduled + tfi_delay, "arrival_delay": tfi_delay,
+                    "arrival_time": None if delay_only else scheduled + tfi_delay, "arrival_delay": tfi_delay,
                     "departure_time": None, "departure_delay": None, "schedule_relationship": "SCHEDULED",
                 })
                 t += POLL_SECONDS
@@ -116,6 +125,8 @@ def simulate(conn, days=10, seed=1, first_day=date(2026, 11, 2), effects=True):
     db.insert_rows(conn, "trip_updates", db.TRIP_UPDATE_COLS, trip_rows)
     db.insert_rows(conn, "vehicle_positions", db.VEHICLE_COLS, vehicle_rows)
     db.insert_rows(conn, "weather", db.WEATHER_COLS, weather)
+    if delay_only:
+        conn.executemany("INSERT INTO schedule (trip_id, stop_id, stop_sequence, arrival_s) VALUES (?,?,?,?)", schedule)
     conn.commit()
     return truth
 
@@ -126,9 +137,10 @@ def main():
     ap.add_argument("--days", type=int, default=14)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--no-effects", action="store_true")
+    ap.add_argument("--delay-only", action="store_true", help="like the real feed, delays but no clock times")
     args = ap.parse_args()
     conn = db.connect(args.path)
-    simulate(conn, args.days, args.seed, effects=not args.no_effects)
+    simulate(conn, args.days, args.seed, effects=not args.no_effects, delay_only=args.delay_only)
     print(f"wrote {args.path}")
 
 

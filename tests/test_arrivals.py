@@ -1,7 +1,8 @@
 import pytest
 
-from bus.arrivals import build_arrivals, feed_arrival, gps_arrival
+from bus.arrivals import build_arrivals, clean_track, feed_arrival, gps_arrival
 from bus.simulate import SPEED
+from tests.conftest import STOP_ID, STOPS
 
 STOP = (53.445076, -6.234542)
 BASE = 1_800_000_000
@@ -94,3 +95,25 @@ def test_cancelled_trip_has_no_arrival(stops):
     arrival = {a.trip_id: a for a in build_arrivals(conn, stops)}[trip_id]
     assert arrival.gps_time is None
     assert arrival.feed_time is None
+
+
+def test_glitchy_gps_fixes_are_ignored():
+    pts = track(BASE, range(BASE - 600, BASE + 600, 60))
+    pts.insert(5, (pts[5][0] + 1, 0.0, 0.0))
+    pts.insert(12, (pts[12][0] + 1, STOP[0] + 1.0, STOP[1]))
+    assert gps_arrival(clean_track(pts), STOP) == pytest.approx(BASE, abs=1)
+
+
+def test_a_fix_in_the_wrong_place_cannot_make_up_an_arrival():
+    pts = [(BASE, 53.5, -6.0), (BASE + 60, 0.0, 0.0), (BASE + 120, 53.5, -6.0)]
+    assert gps_arrival(clean_track(pts), STOP) is None
+
+
+def test_gps_stays_right_when_tfi_keeps_the_stop_listed_for_a_long_time():
+    from tests.conftest import make_db
+    conn, truth = make_db(days=2, seed=4, linger_choices=(900, 1800, 2700))
+    arrivals = build_arrivals(conn, {STOP_ID: STOPS[STOP_ID]})
+    gps = [a.gps_time - truth[(a.trip_id, a.start_date)] for a in arrivals]
+    feed = [a.feed_time - truth[(a.trip_id, a.start_date)] for a in arrivals if a.feed_time]
+    assert max(abs(e) for e in gps) < 6
+    assert min(feed) > 600

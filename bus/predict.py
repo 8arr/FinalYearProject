@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import health
+from . import schedule as schedule_mod
 from .dataset import TZ, is_weekend, local_hour
 from .fallback import estimate_from_history
 
@@ -34,16 +35,24 @@ class Result:
     notes: list = field(default_factory=list)
 
 
-def _upcoming_from_feed(msg, stop_id, now):
+def _upcoming_from_feed(msg, stop_id, now, schedule):
+    """(time, delay seconds, trip id) for buses still to come, soonest first.
+
+    The feed mostly gives a delay and no clock time, so the time is the
+    timetable time plus the delay."""
     found = []
     for ent in msg.entity:
         if not ent.HasField("trip_update"):
             continue
+        trip = ent.trip_update.trip
         for stu in ent.trip_update.stop_time_update:
-            if stu.stop_id != stop_id or not stu.arrival.time:
+            if stu.stop_id != stop_id:
                 continue
-            if stu.arrival.time >= now - 60:
-                found.append((stu.arrival.time, stu.arrival.delay, ent.trip_update.trip.trip_id))
+            delay = stu.arrival.delay if stu.arrival.HasField("delay") else None
+            when = schedule_mod.predicted_time(
+                stu.arrival.time, delay, trip.start_date, schedule.get((trip.trip_id, stop_id)))
+            if when is not None and when >= now - 60:
+                found.append((when, delay or 0, trip.trip_id))
     return sorted(found)
 
 
@@ -66,7 +75,7 @@ def _apply_model(model, upcoming, now, weather):
 
 
 def estimate_next(stop_id, fetch, history, now=None, route_ids=None, model=None,
-                  weather=lambda: (0.0, 0.0), n=3):
+                  weather=lambda: (0.0, 0.0), n=3, schedule=None):
     """fetch() returns the trip updates feed or raises. history(now, n) returns
     HistoryEstimate objects. Neither failing feed nor bad data stops us giving
     an answer."""
@@ -83,7 +92,7 @@ def estimate_next(stop_id, fetch, history, now=None, route_ids=None, model=None,
         usable = False
 
     if usable:
-        upcoming = _upcoming_from_feed(msg, stop_id, now)[:n]
+        upcoming = _upcoming_from_feed(msg, stop_id, now, schedule or {})[:n]
         times = _apply_model(model, upcoming, now, weather) if model and upcoming else [u[0] for u in upcoming]
         return Result("tfi", [Estimate(float(t), tfi_time=u[0], trip_id=u[2])
                               for t, u in zip(times, upcoming)], notes)
@@ -112,6 +121,9 @@ def main():
     key = config.api_key()
     conn = db.connect(args.db)
     mdl = model_mod.load(args.model) if args.model else None
+    sched = schedule_mod.load(conn)
+    if not sched:
+        print("note: no timetable in the database, run scripts/load_schedule.py or times will be missing")
 
     def history(now, n):
         arrivals = build_arrivals(conn, {stop["stop_id"]: stop}, since=now - 29 * 86400)
@@ -120,7 +132,7 @@ def main():
     result = estimate_next(
         stop["stop_id"],
         fetch=lambda: feeds.fetch_feed(config.TRIP_UPDATES_URL, key),
-        history=history, route_ids=route_ids, model=mdl,
+        history=history, route_ids=route_ids, model=mdl, schedule=sched,
         weather=lambda: current_weather(stop["lat"], stop["lon"]),
     )
 
