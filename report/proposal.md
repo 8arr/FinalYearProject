@@ -87,12 +87,18 @@ Published work on bus arrival time prediction includes historical averages, regr
 
 | Period | Work |
 | --- | --- |
-| [dates] | Run the full pipeline on real data, review cases by hand |
-| [dates] | Add traffic and test whether it helps |
-| [dates] | Collect passenger ratings and test whether they help |
-| [dates] | Try other models if needed and compare |
-| [dates] | Deploy with the fallback |
-| [dates] | Final report and demo |
+| 19 Nov to 3 Dec | Run the full pipeline on real data, fix what it finds, check cases by hand |
+| 7 Dec to 9 Jan | Design the ratings form and sort out ethics approval; add a traffic input |
+| 11 Jan to 6 Feb | Improve the model and compare with other models |
+| 11 Jan to 27 Feb | Collect passenger ratings and test whether they help |
+| 8 Feb to 27 Feb | Deploy the estimate service with the fallback |
+| 22 Feb to 13 Mar | Final evaluation, final report and code clean up |
+| 15 to 27 Mar | Buffer before the final submission [check deadline] |
+
+The collector has been running since 11 November and will keep running until early March. Figure 1 shows the plan as a chart, including the work done so far. The dates are a draft.
+
+
+![Project plan (draft)](gantt.png)
 
 **Risks.** The main ones are too little data (mitigated by keeping the collector running and reporting confidence intervals), gaps in collection (logged and reported, backed up nightly), TFI changing its identifiers (health checks would show it quickly), and wrong ground truth (two methods plus the manual review). Results from a single stop may not hold elsewhere, and I will say so.
 

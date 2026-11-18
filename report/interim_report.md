@@ -18,7 +18,7 @@ The TFI app and the real time displays at bus stops tell passengers when the nex
 
 This project asks whether the arrival times published by TFI can be made more accurate by combining them with information that is available at the same time: the time of day and day of the week, the weather, the live position of the bus and, later in the project, traffic and ratings from passengers. The focus is on predictions made 30 or 60 minutes ahead, since that is when someone decides whether to leave the house or wait.
 
-The work so far covers the foundations the rest of the project depends on. A collector has been running on a cloud server since [start date] and stores TFI's predictions, the live bus positions and the weather every minute. I have built a way of working out when buses really arrived, a first prediction model, a way of comparing it against TFI that I can trust, a fallback for when TFI is not available, and an automated set of tests with a page for checking results by eye. The code is on GitHub at [repository link].
+The work so far covers the foundations the rest of the project depends on. A collector has been running on a cloud server since 11 November 2026 and stores TFI's predictions, the live bus positions and the weather every minute. I have built a way of working out when buses really arrived, a first prediction model, a way of comparing it against TFI that I can trust, a fallback for when TFI is not available, and an automated set of tests with a page for checking results by eye. The code is on GitHub at [repository link].
 
 ## 2. Aims and Objectives
 
@@ -157,12 +157,12 @@ The testing follows the advice from my supervisor meeting: tests with known righ
 
 | Item | Status |
 | --- | --- |
-| Cloud server collecting data every minute | Running since [start date] |
+| Cloud server collecting data every minute | Running since 11 November 2026 |
 | Nightly backup to OneDrive | Running |
 | Arrival detection (GPS and feed methods) | Done, tested |
 | Prediction model and comparison with TFI | First version done |
 | Feed health checks and fallback estimate | Done, tested |
-| Automated tests and pipeline | 64 tests, run by GitHub on every push |
+| Automated tests and pipeline | 65 tests, run by GitHub on every push |
 | Human review page | Done |
 | Traffic data | Not started |
 | Passenger ratings | Not started |
@@ -214,12 +214,21 @@ Then report: number of days collected, number of arrivals found, the share found
 
 | Period | Work |
 | --- | --- |
-| [dates] | Run the full pipeline on real data, fix whatever it finds, review at least [50] cases by hand |
-| [dates] | Add a traffic measure and test whether it helps |
-| [dates] | Collect passenger ratings (for example a simple form) and test whether they help or are noise |
-| [dates] | Try other models if the first one is not enough and compare them |
-| [dates] | Deploy the estimate as a simple service or page, with the fallback |
-| [dates] | Write the final report and prepare the demo |
+| 19 Nov to 3 Dec | Run the full pipeline on real data and fix what it finds |
+| 30 Nov to 7 Dec | Check at least 50 cases by hand |
+| 7 Dec to 9 Jan | Design the ratings form and sort out ethics approval |
+| 14 Dec to 9 Jan | Add a traffic input, starting with the buses' own speeds |
+| 11 Jan to 6 Feb | Improve the model and compare it with other models |
+| 11 Jan to 13 Feb | Collect passenger ratings, then test them (15 to 27 Feb) |
+| 8 Feb to 27 Feb | Deploy the estimate service with the fallback |
+| 22 Feb to 6 Mar | Final evaluation on all the data |
+| 11 Jan to 13 Mar | Write the final report, then clean up the code |
+| 15 to 27 Mar | Buffer before the final submission [check deadline] |
+
+Figure 1 shows the plan as a chart, including what has been done. The dates are a draft and will be adjusted to the official deadlines.
+
+
+![Project plan (draft)](gantt.png)
 
 ### 7.2 Risks
 
