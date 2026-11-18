@@ -1,77 +1,53 @@
 # Running the collector on Google Cloud
 
-The collector is tiny (a few requests a minute, a few MB of data a day) so the smallest VM is enough.
+The collector makes 2 requests a minute and stores a few MB a day, so an e2-micro is plenty.
 
-## 1. NTA API key
+## NTA key
 
-1. Register at https://developer.nationaltransport.ie
-2. Go to Products, subscribe to the GTFS-R product
-3. Copy the primary key from your profile page. This is `NTA_API_KEY`.
-
-Quick check that the key works:
+Register at https://developer.nationaltransport.ie, subscribe to the GTFS-R product and copy the primary key. Check it:
 
 ```
 curl -s -o /dev/null -w "%{http_code}\n" -H "x-api-key: YOUR_KEY" https://api.nationaltransport.ie/gtfsr/v2/TripUpdates
 ```
 
-200 means it is fine. While you are on the portal check the rate limit for the product. This setup makes 2 requests a minute (about 2900 a day), and it only needs those two because each response covers every bus in the country and we filter it ourselves. There is no need to query once per stop.
+200 means it works.
 
-## 2. Google Cloud account
+## The VM
 
-1. Go to https://console.cloud.google.com and sign in with a Google account
-2. Accept the terms and activate the free trial if offered. It needs a card for identity checks, and you get some free credit. It will not charge you without you upgrading.
-3. Create a project (top bar, project picker, New Project). Call it something like `fyp-bus`.
-4. Make sure billing is linked to the project (Billing menu).
+Create a project in the Google Cloud console and link billing (the free trial needs a card). Then Compute Engine, create instance:
 
-## 3. Create the VM
+- name `bus-collector`, region `us-central1` (free tier is only us-west1, us-central1, us-east1)
+- machine type `e2-micro`
+- Ubuntu 24.04 LTS, standard persistent disk (not balanced), 20GB
+- leave the firewall boxes unticked
 
-In the console go to Compute Engine, VM instances, Create instance (the Compute Engine API will enable itself the first time).
+The ~$8 estimate in the console ignores the free tier, it comes off the bill later. The external IP is not free though, a few dollars a month. Set a budget alert at a few euro.
 
-- Name: `bus-collector`
-- Region: `us-central1` (the always free e2-micro is only available in us-west1, us-central1 and us-east1. The location does not matter for this job). If the NTA API refuses requests from the US, use `europe-west1` with an `e2-small` instead, which costs a few euro a month.
-- Machine type: `e2-micro`
-- Boot disk: Ubuntu 24.04 LTS, standard persistent disk, 20GB
-- Leave the firewall boxes unticked, nothing needs to reach the VM
+## Setting it up
 
-Then click Create. Using the command line instead, after installing the gcloud CLI and running `gcloud auth login`:
+SSH in from the console and run:
 
 ```
-gcloud config set project YOUR_PROJECT_ID
-gcloud compute instances create bus-collector \
-  --zone=us-central1-a \
-  --machine-type=e2-micro \
-  --image-family=ubuntu-2404-lts-amd64 --image-project=ubuntu-os-cloud \
-  --boot-disk-size=20GB --boot-disk-type=pd-standard
-```
-
-## 4. Set up the VM
-
-Click SSH next to the instance in the console (or `gcloud compute ssh bus-collector --zone=us-central1-a`), then:
-
-```
-sudo apt update && sudo apt install -y git python3-venv python3-pip
+sudo apt update && sudo apt install -y git python3-venv python3-pip sqlite3
 git clone https://github.com/8arr/FinalYearProject.git
 cd FinalYearProject
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 echo "NTA_API_KEY=YOUR_KEY" > .env
 chmod 600 .env
+.venv/bin/python scripts/load_schedule.py
 ```
 
-If the repo is private, use a personal access token in the clone URL or set up a deploy key.
-
-Try it in the foreground first for a minute:
+Try it in the foreground first (Ctrl+C to stop):
 
 ```
 set -a; . ./.env; set +a
 .venv/bin/python -m collector.run
 ```
 
-You should see lines like `trip updates: 2 rows from 600 entities`. Zero rows is normal when no bus is near the stops. Ctrl+C to stop.
+## Keeping it running
 
-## 5. Keep it running
-
-The systemd unit restarts the collector if it crashes and starts it on boot. The unit file assumes the user `ubuntu`, so swap in your own username:
+The unit file uses the user `ubuntu`, so swap in yours:
 
 ```
 sed "s/ubuntu/$USER/g" deploy/bus-collector.service | sudo tee /etc/systemd/system/bus-collector.service
@@ -79,19 +55,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now bus-collector
 ```
 
-Check on it:
+Check with `systemctl status bus-collector`, `journalctl -u bus-collector -f` and `.venv/bin/python scripts/status.py`. After pushing changes: `git pull && sudo systemctl restart bus-collector`.
 
-```
-systemctl status bus-collector
-journalctl -u bus-collector -f
-.venv/bin/python scripts/status.py
-```
-
-To update after pushing code changes: `git pull && sudo systemctl restart bus-collector`.
-
-## Updating after TFI publishes a new timetable
-
-TFI publishes new timetable data every so often and the route ids can change (it went from `1 41C c a` to `1_41C_c_a`). The collector now ignores that difference, but if `scripts/status.py` ever shows 0 rows stored in the last 24 hours, refresh the targets and the schedule:
+If `status.py` shows 0 rows in the last 24h, the route id or stops have probably changed (it went from `1 41C c a` to `1_41C_c_a` once). Rerun:
 
 ```
 .venv/bin/python scripts/find_stops.py --main 5029 --routes 41C --count 6
@@ -99,41 +65,17 @@ TFI publishes new timetable data every so often and the route ids can change (it
 sudo systemctl restart bus-collector
 ```
 
-`load_schedule.py` also needs to be run once when setting up, because the feed mostly gives delays and the timetable is needed to turn them into clock times.
+## Backups to OneDrive
 
-## 6. Backups to OneDrive
-
-This uses rclone on the VM to upload a copy of the database every night. The `.backup` command in `scripts/backup.sh` makes a safe copy even while the collector is writing.
-
-On the VM:
+`scripts/backup.sh` makes a copy with sqlite3 `.backup` (safe while the collector is writing), gzips it and uploads it with rclone.
 
 ```
-sudo apt install -y sqlite3
 curl https://rclone.org/install.sh | sudo bash
 ```
 
-The VM has no browser, so the OneDrive login happens on your own computer. On your PC install rclone (on Windows: `winget install Rclone.Rclone`, then reopen the terminal) and run:
+The VM has no browser, so on my PC I ran `rclone authorize "onedrive"`, signed in, and copied the token it printed. Then on the VM `rclone config`: new remote called `onedrive`, type `onedrive`, leave client id and secret blank, region 1, no advanced config, say no to the web browser question and paste the token, then pick the personal drive.
 
-```
-rclone authorize "onedrive"
-```
-
-Sign in to your Microsoft account in the browser window that opens. The terminal then prints a block of text starting with `{"access_token"`. Copy it.
-
-Back on the VM run `rclone config` and answer:
-
-1. `n` for new remote
-2. name: `onedrive`
-3. storage: type `onedrive` (pick it from the list by number)
-4. client_id and client_secret: press Enter to leave blank
-5. region: `1` (Microsoft Cloud Global)
-6. edit advanced config: `n`
-7. use web browser to authenticate: `n`
-8. paste the token block from your PC
-9. config type: `1` (OneDrive Personal or Business, whichever your account is), then pick the drive it lists
-10. `y` to confirm, then `q`
-
-Check it works:
+Test it:
 
 ```
 rclone lsd onedrive:
@@ -141,30 +83,8 @@ rclone lsd onedrive:
 rclone ls onedrive:fyp-backups
 ```
 
-Then run it every night at 03:00 with cron:
-
-```
-crontab -e
-```
-
-and add this line at the bottom (change the path if your username is not the same):
+Then `crontab -e` and add (3am every night):
 
 ```
 0 3 * * * /home/YOUR_USERNAME/FinalYearProject/scripts/backup.sh >> /tmp/backup.log 2>&1
 ```
-
-The files appear in a `fyp-backups` folder in your OneDrive, one gzipped database per night. To open one, unzip it and open it with any SQLite tool.
-
-If you would rather not use rclone, you can pull the file to your PC by hand instead:
-
-```
-gcloud compute scp bus-collector:~/FinalYearProject/data/bus.db . --zone=us-central1-a
-```
-
-## Costs
-
-The console price estimate when creating the VM (about $8 a month) is the normal list price and does not take the free tier into account. The free tier is taken off your bill afterwards.
-
-It covers one e2-micro per month in us-west1, us-central1 or us-east1, plus 30GB of standard persistent disk (not balanced or SSD, so change the disk type when creating the VM). It does not cover the external IPv4 address, which is a few dollars a month. While the free trial credit lasts that is paid from the credit.
-
-Set a budget alert (Billing, Budgets and alerts) at a few euro so you get an email if the bill is higher than expected, and check Billing, Reports after a few days to see what is actually being charged.
