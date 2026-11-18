@@ -21,7 +21,7 @@ Stages run in order and it stops at the first failure.
 | unit tests | the pytest suite in `tests/` |
 | stored data quality | gaps in collection, failed polls, absurd delays in the database |
 | live feed check | fetches the real feeds (needs `NTA_API_KEY`) and checks they look sane |
-| arrival detection | the GPS method and the feed method find arrivals and roughly agree |
+| arrival detection | enough trips have a GPS arrival time (the feed method is shown as a cross check only) |
 | accuracy against TFI | the model is not worse than TFI on days it was not trained on |
 | fallback without TFI | estimates from history alone are within 10 minutes on the latest day |
 | human review | how often you agreed with the detected arrival times |
@@ -52,7 +52,8 @@ Open http://127.0.0.1:8000. Each page shows one bus: the distance from the stop 
 
 ```
 python -m bus.evaluate --horizon 30 60           # accuracy table for the report
-python -m bus.evaluate --truth feed              # use the feed method as the ground truth
+python -m bus.evaluate --truth feed              # use the feed method as the ground truth (unreliable)
+python scripts/load_schedule.py --db data/bus.db  # timetable, needed because the feed gives delays not times
 python -m bus.model --horizon 30 --out data/model30.pkl
 python -m bus.predict --stop 5029 --model data/model30.pkl
 python -m bus.simulate data/sim.db --days 14     # fake data to try things on

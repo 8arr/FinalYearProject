@@ -10,20 +10,22 @@ Dates are my best guess. Check them against the official deadlines for the propo
 | --- | --- | --- |
 | Topic choice and supervisor meetings | mid October to 9 Nov | |
 | Stop selection, API key, cloud server setup | 9 to 11 Nov | 6 stops on the 41C around stop 5029 |
-| Collector running, nightly backups | 10 to 12 Nov | collecting since 11 Nov |
-| Arrival detection, model, fallback, tests, review page | 12 to 18 Nov | 65 tests, pipeline script, GitHub checks |
+| Collector running, nightly backups | 10 to 12 Nov | only the evening of 11 Nov was stored correctly, 6 days lost |
+| Arrival detection, model, fallback, tests, review page | 12 to 18 Nov | 81 tests, pipeline script, GitHub checks |
+| Look at first real data, find and fix collector fault | 18 Nov | The collector had stored nothing since 12 Nov because TFI changed its route id format. Also found: the feed has delays but no clock times, the feed method for arrival times is unreliable, and about 22% of vehicle requests were rejected. All handled in code. |
 | Draft proposal and interim report | 17 to 18 Nov | drafts to be rewritten by me |
 
 ## Still to do
 
 | Task | Start | End | Length | Why this long |
 | --- | --- | --- | --- | --- |
-| Data collection (continuous) | 11 Nov | 5 Mar | about 16 weeks | Runs by itself. Stop a week or two before the final evaluation so the numbers can be frozen. |
-| Look at real data, run pipeline, fix problems | 19 Nov | 3 Dec | 2 weeks | First contact with real data nearly always finds something (missing fields, odd stops, gaps). |
+| Redeploy fixed collector, load timetable | 18 Nov | 23 Nov | a few days | The fix is written, it needs merging and restarting on the server, plus loading the timetable once. Do this first, every day of delay is a day of lost data. |
+| Data collection (continuous, restarted) | 22 Nov | 5 Mar | about 15 weeks | Runs by itself. Check `scripts/status.py` every few days. Stop a week or two before the final evaluation so the numbers can be frozen. |
+| Run pipeline on new data, fix problems | 1 Dec | 12 Dec | 2 weeks | Needs about 10 days of data to be meaningful. Real data has already found several problems, expect more. |
 | Rewrite and send proposal | 19 Nov | 26 Nov | 1 week | The text exists already, the work is checking facts and rewriting in my own words. It is overdue so this goes first. |
-| Check 50+ cases by hand | 30 Nov | 7 Dec | 1 week | About 2 minutes a case, spread over a few sittings. |
-| Finish interim report | 23 Nov | 12 Dec | about 3 weeks | Needs the real results from the line above, so it runs alongside. Check the real deadline. |
-| Interim demo preparation | 7 Dec | 15 Dec | 1 week | Short demo with the latest version. No slides beyond what is needed. |
+| Check 50+ cases by hand | 7 Dec | 14 Dec | 1 week | About 2 minutes a case, spread over a few sittings. |
+| Finish interim report | 23 Nov | 14 Dec | about 3 weeks | Needs the real results from the line above, so it runs alongside. Check the real deadline. |
+| Interim demo preparation | 10 Dec | 17 Dec | 1 week | Short demo with the latest version. No slides beyond what is needed. |
 | Ratings: form design and ethics check | 7 Dec | 9 Jan | 4 weeks elapsed, a few days of effort | Ethics approval can take weeks, so start early. |
 | Traffic input (bus speeds first) | 14 Dec | 9 Jan | 3 weeks, slowed by holidays | Compute average bus speed near the stops from stored positions, test it as another input. A paid traffic API is only worth it if this shows promise. |
 | Holidays, reduced work | 21 Dec | 4 Jan | 2 weeks | Check exam dates too and adjust. |
@@ -43,8 +45,9 @@ Cut in this order: passenger ratings (report it as future work and keep the meth
 ## Milestones to keep an eye on
 
 - Proposal sent to supervisor: end of November
-- First real results (even if the model does not beat TFI): early December
-- Interim report and demo: [check deadline], planned for mid December
+- Collector redeployed and storing data again: by 23 November
+- First real results on the new data (even if the model does not beat TFI): around 12 December
+- Interim report and demo: [check deadline], planned for mid December. The interim results will rest on only 2 to 3 weeks of data, so say so.
 - Ratings ethics approval in place: early January
 - Freeze data and rerun the evaluation: early March
 - Final submission: [check deadline], planned for late March

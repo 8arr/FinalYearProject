@@ -18,7 +18,7 @@ The TFI app and the real time displays at bus stops tell passengers when the nex
 
 This project asks whether the arrival times published by TFI can be made more accurate by combining them with information that is available at the same time: the time of day and day of the week, the weather, the live position of the bus and, later in the project, traffic and ratings from passengers. The focus is on predictions made 30 or 60 minutes ahead, since that is when someone decides whether to leave the house or wait.
 
-The work so far covers the foundations the rest of the project depends on. A collector has been running on a cloud server since 11 November 2026 and stores TFI's predictions, the live bus positions and the weather every minute. I have built a way of working out when buses really arrived, a first prediction model, a way of comparing it against TFI that I can trust, a fallback for when TFI is not available, and an automated set of tests with a page for checking results by eye. The code is on GitHub at [repository link].
+The work so far covers the foundations the rest of the project depends on. A collector was set up on a cloud server on 11 November 2026 to store TFI's predictions, the live bus positions and the weather every minute. Looking at the first real data showed that it stopped keeping anything after the first evening, because TFI changed the format of its route identifiers. That was found and fixed on 18 November (see section 6.4), so the real dataset is smaller than planned and the results in section 6.3 are only preliminary. I have built a way of working out when buses really arrived, a first prediction model, a way of comparing it against TFI that I can trust, a fallback for when TFI is not available, and an automated set of tests with a page for checking results by eye. The code is on GitHub at [repository link].
 
 ## 2. Aims and Objectives
 
@@ -109,7 +109,7 @@ One request to the GTFS-R API returns every bus in the country, which I filter l
 
 The system has four parts, shown in the order data flows through them.
 
-**4.1 Collection.** A Python service on the cloud server asks the NTA API for trip updates and vehicle positions once a minute and weather every ten minutes. It keeps only what is relevant: predicted arrivals at six stops on the 41C, and the position of every 41C bus. The stops are 5029 Boroimhe Laurels, 5031 Boroimhe Cherry, 5030 and 5028 Boroimhe Maples, and 6033 and 6015 Cherry Park. They were picked by taking stop 5029 and the five nearest stops on the 41C from the TFI static timetable data (the script for this is `scripts/find_stops.py`). Everything goes into SQLite. Every request, successful or not, is logged in a `polls` table so that gaps in the data can be explained later. The service runs under systemd so it restarts after a crash or reboot, and a nightly job copies the database to OneDrive.
+**4.1 Collection.** A Python service on the cloud server asks the NTA API for trip updates and vehicle positions once a minute and weather every ten minutes. It keeps only what is relevant: predicted arrivals at six stops on the 41C, and the position of every 41C bus. Requests that the API rejects as too frequent (HTTP 429) are retried, and the service warns if it has kept nothing for several hours in the daytime. The stops are 5029 Boroimhe Laurels, 5031 Boroimhe Cherry, 5030 and 5028 Boroimhe Maples, and 6033 and 6015 Cherry Park. They were picked by taking stop 5029 and the five nearest stops on the 41C from the TFI static timetable data (the script for this is `scripts/find_stops.py`). Everything goes into SQLite. Every request, successful or not, is logged in a `polls` table so that gaps in the data can be explained later. The service runs under systemd so it restarts after a crash or reboot, and a nightly job copies the database to OneDrive.
 
 **4.2 Finding the real arrival time.** The feed only gives predictions, so the real arrival time has to be worked out afterwards. Two methods are implemented so they can be compared.
 
@@ -117,9 +117,9 @@ The system has four parts, shown in the order data flows through them.
 
 *Feed method.* TFI keeps showing a bus as due for a while after it has gone. I take the first poll in which the stop is no longer listed for that trip and subtract one minute. Trips that vanish while still more than five minutes away are treated as cancelled, and trips are ignored if the collector had a gap around the time they disappeared.
 
-Where both exist, the GPS method is used as the ground truth, and the difference between the two methods is itself a result worth reporting.
+The first real data showed that the feed method is not reliable. In the cases I looked at, TFI kept a stop in the list for between 13 and 45 minutes after the GPS showed the bus had passed, so "disappeared minus a minute" was far too late. The GPS method is therefore used as the ground truth and the feed method is only kept as a cross check. This is a result in itself, since it explains why a bus can look due long after it has left.
 
-**4.3 Prediction.** For every arrival I find the moment when TFI was saying the bus was 30 (or 60) minutes away, and record TFI's predicted time together with the hour of day, whether it is a weekend, and the rain and wind at that time. The sample is chosen using what TFI said, not when the bus really arrived. An early version chose the poll 30 minutes before the real arrival, which accidentally let the real arrival time leak into the inputs and made the model look almost perfect. The tests now check for this.
+**4.3 Prediction.** The live feed mostly reports how late a bus is, a delay in seconds, and almost never a clock time. The time TFI is predicting is therefore the timetable time from TFI's static data plus that delay, so the timetable for the six stops is loaded into the database (`scripts/load_schedule.py`). For every arrival I find the moment when TFI was saying the bus was 30 (or 60) minutes away, and record TFI's predicted time together with the hour of day, whether it is a weekend, and the rain and wind at that time. The sample is chosen using what TFI said, not when the bus really arrived. An early version chose the poll 30 minutes before the real arrival, which accidentally let the real arrival time leak into the inputs and made the model look almost perfect. The tests now check for this.
 
 The model, a small gradient boosting regressor, does not predict the arrival time directly. It predicts the correction to add to TFI's time. If there is nothing to learn, the correction goes towards zero and the prediction stays close to TFI. Two baselines are kept for comparison: TFI as it is, and TFI shifted by its typical error.
 
@@ -133,9 +133,10 @@ The testing follows the advice from my supervisor meeting: tests with known righ
 
 **Simulated data with known answers.** `bus/simulate.py` generates two weeks of data in which each bus's true arrival time is known exactly, the TFI predictions only learn about delays shortly before arrival, and the real delays depend on hour of day and rain. Because the right answer is known, the tests can check for both positive and negative outcomes:
 
-- A bus passing the stop must give an arrival within a few seconds; a bus passing 100 m away, a long gap in the GPS track, a cancelled trip and a collector outage must not give one.
+- A bus passing the stop must give an arrival within a few seconds; a bus passing 100 m away, a long gap in the GPS track, a glitchy position, a cancelled trip and a collector outage must not give one.
+- The feed in the tests sends delays and no clock times, like the real one, and the stop stays listed for up to 45 minutes after the bus, like the real one.
 - Where delays depend on time of day, the model must beat TFI. Where delays are pure noise, the model must not be called better.
-- Empty, stale and nonsense feeds must be rejected.
+- Empty, stale and nonsense feeds must be rejected, and so must a stored dataset where the collector kept nothing for a day.
 - If TFI is unreachable, stale or nonsense, an estimate must still come out, marked as coming from history.
 
 **System test.** `tests/test_system.py` starts a fake TFI server and runs the real collector code against it, then the database, the arrival detection and the live estimate, one after the other, including a simulated TFI outage.
@@ -157,12 +158,12 @@ The testing follows the advice from my supervisor meeting: tests with known righ
 
 | Item | Status |
 | --- | --- |
-| Cloud server collecting data every minute | Running since 11 November 2026 |
+| Cloud server collecting data every minute | Set up 11 November. Only the first evening was stored correctly, fixed 18 November, [redeploy date] |
 | Nightly backup to OneDrive | Running |
-| Arrival detection (GPS and feed methods) | Done, tested |
+| Arrival detection (GPS method used, feed method as a cross check) | Done, tested, checked against the first real data |
 | Prediction model and comparison with TFI | First version done |
 | Feed health checks and fallback estimate | Done, tested |
-| Automated tests and pipeline | 65 tests, run by GitHub on every push |
+| Automated tests and pipeline | 81 tests, run by GitHub on every push |
 | Human review page | Done |
 | Traffic data | Not started |
 | Passenger ratings | Not started |
@@ -175,38 +176,42 @@ The first set of figures is from the simulated data and only shows that the tool
 | Check | Result |
 | --- | --- |
 | GPS method, 714 simulated arrivals | average error 0.4 s, worst 4.3 s |
-| Feed method, same arrivals | on average 51 s late, between 67 s early and 173 s late |
+| Feed method, when the stop lingers 15 to 45 minutes | at least 14 minutes late on every trip, as seen on real data |
 | Model vs TFI at 30 minutes, effects present | error 0.85 min against 1.39 min, saving 23 to 41 s per bus, verdict better |
 | Model vs TFI at 60 minutes, effects present | error 0.84 min against 1.62 min, saving 35 to 58 s per bus, verdict better |
 | Model vs TFI at 30 minutes, nothing to learn | error 0.81 min against 0.80 min, interval spans zero, verdict inconclusive |
 | Fallback on the latest day, 51 buses | average error 0.8 min |
 
-The feed method being late on average is built into the simulation, since it makes TFI keep showing buses for up to three minutes. It is there to check the tools notice it. On real data this comparison will show how well the "subtract a minute" rule works.
-
 ### 6.3 Results on real data
 
-[Fill this in from the real database. Copy the database from OneDrive to `data/bus.db` and run:
+Only the first evening of collection (11 November, about 5 hours) was stored correctly, so these results are preliminary and the sample is tiny. They are included to show what the real data looks like and that the method works on it.
 
-```
-python scripts/status.py
-python scripts/run_pipeline.py --json results.json
-python -m bus.evaluate --horizon 30 60
-python -m bus.evaluate --horizon 30 60 --truth feed
-```
+- There are 44 combinations of a trip and a stop in the data, and 18 of them have a GPS arrival time. I have not yet checked why the rest are missing. Likely causes are the fifth of vehicle requests that the API rejected, buses that had already passed when collection started and trips that ended after it stopped.
+- Compared with the timetable, the 18 buses arrived between 58 seconds early and 11 minutes late. The GPS arrival times agree well with the delay TFI reported for the same bus: for the bus I looked at in detail, GPS gave 37 seconds late and TFI said 41 seconds late.
+- The feed method was between 7 and 54 minutes later than GPS on the 9 trips where both exist, which is why it is not used as the truth.
+- TFI's prediction error measured against the GPS arrival, with 8 samples at 30 minutes ahead and 9 at 60 minutes ahead:
 
-Then report: number of days collected, number of arrivals found, the share found by each method, how far apart the two methods are, and the table of TFI against the model at each horizon. Also report any collection gaps from the data quality stage and how many cases I checked by hand and how often I agreed. If the model does not beat TFI yet, say so. That is still a result.]
+| Horizon | n | TFI mean absolute error (min) | Average bias (min) | Within 2 minutes |
+| --- | --- | --- | --- | --- |
+| 30 min | 8 | 3.6 | TFI too early by 3.6 | 50% |
+| 60 min | 9 | 4.4 | TFI too early by 4.3 | 44% |
 
-| Horizon | n (test) | TFI error (min) | Model error (min) | Saving per bus (95% interval) | Verdict |
-| --- | --- | --- | --- | --- | --- |
-| 30 min | [ ] | [ ] | [ ] | [ ] | [ ] |
-| 60 min | [ ] | [ ] | [ ] | [ ] | [ ] |
+That is too few buses to say anything firm, and no comparison with the model is possible yet. [Replace this section with the full results once there are a few weeks of data. Copy the database to `data/bus.db` and run `python scripts/data_overview.py data/bus.db`, `python scripts/run_pipeline.py --skip-tests --json results.json` and `python -m bus.evaluate --horizon 30 60`. Report the number of days, the number of arrivals, the table of TFI against the model, the gaps found by the data quality stage and how often I agreed in the review page.]
 
 ### 6.4 Problems found along the way
 
 - The first version of the sampling leaked the answer into the model, as described in section 4.3. It was caught because the model's results on simulated data were too good to be true, and a test now guards against it.
 - A 25 metre radius around the stop would miss nearly every bus at one poll a minute, which is why the arrival is interpolated between positions.
 - Stop 5031 is only 31 metres from the main stop, so [check whether it is on the opposite side of the road and how this affects GPS matching].
-- The route identifier in the live feed ("1 41C c a") comes from the static timetable and could change when TFI publishes a new timetable. If the collector suddenly stores nothing, `scripts/find_stops.py` needs to be run again.
+- **The collector stopped matching anything after the first evening.** On 12 November TFI changed the route identifier in its data from "1 41C c a" to "1_41C_c_a". The collector filtered on the old text, so for six days the polls succeeded but nothing was kept. It was found on 18 November when I first looked at the database, and the six days of data are lost because the feed only shows the present. The collector now ignores that kind of difference, warns when it has kept nothing for hours in the daytime, and the data quality stage of the pipeline fails if a day passes with nothing stored.
+- **The feed has delays but not clock times.** Only 1 percent of stored predictions had a time, the rest had just a delay. The timetable is now loaded from TFI's static data and added to the delay to get the predicted time. The few rows that do have a clock time put the bus 48 seconds after its timetable time, which is a plausible small delay.
+- **Requests being rejected.** About a fifth of the vehicle requests failed with "too many requests" even at one a minute. They were isolated, so the collector now retries after a few seconds.
+- **The feed method is unreliable** as described in section 4.2.
+- **Glitchy positions.** Some GPS records are impossible (one was thousands of kilometres away) and others are repeated again and again from the same spot. Those are now filtered out before the arrival is worked out.
+- The first version of the sampling leaked the answer into the model, as described in section 4.3. It was caught because the model's results on simulated data were too good to be true, and a test now guards against it.
+- A 25 metre radius around the stop would miss nearly every bus at one poll a minute, which is why the arrival is interpolated between positions.
+- Several other routes (for example the 500 and 102) also stop at these stops, so predictions are filtered to the 41C. Looking at the timetable, 5029 and 5028 are used by trips to Abbey St and 5031 and 5030 by trips to Swords Manor.
+- In at least one case TFI's list for a trip only started after the bus had already passed the stop, with no delay given. Rows like that look like predictions but are not, and they are skipped.
 
 ## 7. Plan for Remaining Work, Risks and Ethics
 
@@ -214,8 +219,9 @@ Then report: number of days collected, number of arrivals found, the share found
 
 | Period | Work |
 | --- | --- |
-| 19 Nov to 3 Dec | Run the full pipeline on real data and fix what it finds |
-| 30 Nov to 7 Dec | Check at least 50 cases by hand |
+| 18 to 22 Nov | Redeploy the fixed collector, load the timetable, check the first days of data |
+| 1 Dec to 12 Dec | Run the full pipeline on the new real data and fix what it finds |
+| 7 Dec to 14 Dec | Check at least 50 cases by hand |
 | 7 Dec to 9 Jan | Design the ratings form and sort out ethics approval |
 | 14 Dec to 9 Jan | Add a traffic input, starting with the buses' own speeds |
 | 11 Jan to 6 Feb | Improve the model and compare it with other models |
@@ -234,9 +240,9 @@ Figure 1 shows the plan as a chart, including what has been done. The dates are 
 
 | Risk | What I will do |
 | --- | --- |
-| Not enough data for the model to learn from | Keep the collector running, report confidence intervals, make the model fall back towards TFI |
+| Not enough data for the model to learn from, made worse by the six lost days | Keep the collector running, report confidence intervals, make the model fall back towards TFI, check the collector every few days |
 | Gaps in the collection | The poll log shows them, the quality stage reports them, the backups limit the loss |
-| TFI changes its identifiers or feed | The live health checks and the zero rows check will show it quickly |
+| TFI changes its identifiers or feed again (it already did once) | The collector ignores format changes in route ids and warns if it keeps nothing for hours, the pipeline fails on a day with nothing stored |
 | Ground truth is wrong | Two methods and the manual review page |
 | Results are good on one stop only | Say so clearly, test on the other stops separately |
 | Ratings are too few or not useful | Test them as an optional input, report the outcome either way |
@@ -247,7 +253,7 @@ The data collected so far is public transport data and weather, with no personal
 
 ## 8. Conclusion
 
-The collection, ground truth, comparison, fallback and testing are in place and working on simulated data, and the collector is building up the real dataset. The next step is running everything on real data to find out how accurate TFI's predictions really are at 30 and 60 minutes and whether the model improves on them. Traffic and passenger ratings come after that, and deployment follows once the tests pass on real data.
+The collection, ground truth, comparison, fallback and testing are in place and work on simulated data, and the first real data confirmed that the GPS method gives sensible arrival times. The collector lost six days to a change in TFI's route identifiers, which has been fixed, so the real dataset is smaller than planned and is building up again. The next step is redeploying the collector and, once a few weeks of data have built up, running everything on real data to find out how accurate TFI's predictions really are at 30 and 60 minutes and whether the model improves on them. The first small sample suggests TFI's predictions are too early by several minutes. Traffic and passenger ratings come after that, and deployment follows once the tests pass on real data.
 
 ## References
 

@@ -65,7 +65,7 @@ Published work on bus arrival time prediction includes historical averages, regr
 
 **Collection.** A Python service on the cloud server polls the NTA API once a minute for trip updates and vehicle positions, and weather every ten minutes, and keeps only the 41C buses and the six chosen stops (5029, 5031, 5030, 5028, 6033 and 6015). One request returns every bus in the country, so two requests a minute are enough and the polling rate should not be a problem for the API. Every request is logged so gaps can be explained later. The service restarts itself after a crash and the database is backed up every night.
 
-**Actual arrival times.** The feed gives predictions, not confirmed arrivals, so two methods are used to reconstruct them. In the GPS method the bus path is interpolated between positions, and the arrival is the time it was closest to the stop, provided that was within 25 metres. This is needed because a bus moves several hundred metres between polls. In the feed method the arrival is taken as one minute before the stop disappeared from TFI's list. The two are compared, which is a useful result on its own.
+**Actual arrival times.** The feed gives predictions, not confirmed arrivals, so two methods are used to reconstruct them. In the GPS method the bus path is interpolated between positions, and the arrival is the time it was closest to the stop, provided that was within 25 metres. This is needed because a bus moves several hundred metres between polls. In the feed method the arrival is taken as one minute before the stop disappeared from TFI's list. The two were compared on the first real data, and the feed method turned out to be unreliable because TFI keeps a stop listed for 10 to 45 minutes after the bus has gone. The GPS method is therefore used as the ground truth.
 
 **Prediction.** For each arrival, the system takes the moment TFI said the bus was 30 (or 60) minutes away, and records TFI's predicted time along with hour of day, weekend or not, rain and wind. A gradient boosting model learns the correction to apply to TFI's time. If there is nothing to learn the correction tends to zero, so the model stays close to TFI. The choice of moment is based on what TFI said, not on when the bus really arrived, to avoid leaking the answer into the inputs.
 
@@ -81,13 +81,14 @@ Published work on bus arrival time prediction includes historical averages, regr
 
 **Accuracy.** Models are trained on earlier days and tested on later ones. Measures are mean and median absolute error, root mean squared error, bias, and the share of predictions within one and two minutes. A paired bootstrap gives a 95 percent interval for the seconds saved per bus compared with TFI, and the model is only called better if the whole interval is above zero. The same approach tests each input (time of day, weather and later traffic and ratings): it is kept only if removing it makes the error on unseen days worse.
 
-**Early results.** On simulated data the tools find a real effect when one exists and report nothing when there is none. For example, the GPS method recovered simulated arrival times with an average error of 0.4 seconds, and the model's saving over TFI was clearly above zero with effects present and inconclusive without. Results on real data will be reported in the interim report. [Add one line on real data here if it is available by then.]
+**Early results.** On simulated data the tools find a real effect when one exists and report nothing when there is none. For example, the GPS method recovered simulated arrival times with an average error of 0.4 seconds, and the model's saving over TFI was clearly above zero with effects present and inconclusive without. On the first few hours of real data (8 buses at 30 minutes ahead, 9 at 60 minutes) TFI's predictions were too early by about 4 minutes on average, but that is far too few buses to rely on. A change in TFI's route identifiers also stopped the collector storing data for six days, which has been fixed. Results on a larger real dataset will be in the interim report. [Update this paragraph if more data is available when this is sent.]
 
 ## 6. Plan, Risks and Ethics
 
 | Period | Work |
 | --- | --- |
-| 19 Nov to 3 Dec | Run the full pipeline on real data, fix what it finds, check cases by hand |
+| 18 to 22 Nov | Redeploy the fixed collector and load the timetable |
+| 1 Dec to 14 Dec | Run the full pipeline on the new real data, fix what it finds, check cases by hand |
 | 7 Dec to 9 Jan | Design the ratings form and sort out ethics approval; add a traffic input |
 | 11 Jan to 6 Feb | Improve the model and compare with other models |
 | 11 Jan to 27 Feb | Collect passenger ratings and test whether they help |
@@ -95,7 +96,7 @@ Published work on bus arrival time prediction includes historical averages, regr
 | 22 Feb to 13 Mar | Final evaluation, final report and code clean up |
 | 15 to 27 Mar | Buffer before the final submission [check deadline] |
 
-The collector has been running since 11 November and will keep running until early March. Figure 1 shows the plan as a chart, including the work done so far. The dates are a draft.
+The collector was set up on 11 November, lost six days of data to a change in TFI's identifiers, and will keep running from its restart until early March. Figure 1 shows the plan as a chart, including the work done so far. The dates are a draft.
 
 
 ![Project plan (draft)](gantt.png)
