@@ -7,6 +7,8 @@ Bus arrival time prediction for the 41C in Swords, Co. Dublin. The idea is to ta
 - `scripts/find_stops.py` picks the stops to watch (5029 Boroimhe Laurels and the closest stops on the 41C) and writes `data/targets.json`
 - `collector/` polls the NTA GTFS-Realtime feeds once a minute plus the weather every 10 minutes and stores it all in SQLite (`data/bus.db`)
 - `scripts/status.py` shows how much has been collected
+- `bus/` works out real arrival times, compares a correction model against TFI, checks feed health, estimates from history when TFI is down and has the review page
+- `scripts/run_pipeline.py` runs all the checks in order, see `docs/testing.md`
 - `deploy/` systemd unit for running the collector on a VM
 - `docs/gcp-setup.md` how to get it running on Google Cloud
 
@@ -36,5 +38,8 @@ Actual arrival times are not stored directly. They get worked out afterwards fro
 ## Tests
 
 ```
-python -m pytest tests
+pip install -r requirements-analysis.txt
+python scripts/run_pipeline.py --sim
 ```
+
+More in `docs/testing.md`.
