@@ -89,6 +89,18 @@ journalctl -u bus-collector -f
 
 To update after pushing code changes: `git pull && sudo systemctl restart bus-collector`.
 
+## Updating after TFI publishes a new timetable
+
+TFI publishes new timetable data every so often and the route ids can change (it went from `1 41C c a` to `1_41C_c_a`). The collector now ignores that difference, but if `scripts/status.py` ever shows 0 rows stored in the last 24 hours, refresh the targets and the schedule:
+
+```
+.venv/bin/python scripts/find_stops.py --main 5029 --routes 41C --count 6
+.venv/bin/python scripts/load_schedule.py
+sudo systemctl restart bus-collector
+```
+
+`load_schedule.py` also needs to be run once when setting up, because the feed mostly gives delays and the timetable is needed to turn them into clock times.
+
 ## 6. Backups to OneDrive
 
 This uses rclone on the VM to upload a copy of the database every night. The `.backup` command in `scripts/backup.sh` makes a safe copy even while the collector is writing.

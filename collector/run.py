@@ -6,12 +6,24 @@
 import logging
 import signal
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from . import config, db, feeds
 from .weather import fetch_weather
 
 log = logging.getLogger("collector")
 stopping = False
+
+# the 41C runs from early morning until late, so hours of nothing during the
+# day means our filter has stopped matching (this happened when TFI changed
+# the route id format) and not that there are no buses
+SILENT_AFTER_S = 3 * 3600
+WARN_EVERY_S = 1800
+
+
+def in_service_hours(epoch):
+    return 8 <= datetime.fromtimestamp(epoch, ZoneInfo("Europe/Dublin")).hour < 21
 
 
 def handle_signal(signum, frame):
@@ -20,15 +32,18 @@ def handle_signal(signum, frame):
 
 
 def poll_trip_updates(conn, key, route_ids, stops, now):
+    """Returns (rows kept, route ids seen at our stops if nothing was kept)."""
     try:
         msg = feeds.fetch_feed(config.TRIP_UPDATES_URL, key)
         rows = feeds.trip_update_rows(msg, route_ids, stops, now)
         db.insert_rows(conn, "trip_updates", db.TRIP_UPDATE_COLS, rows)
         db.log_poll(conn, now, "trip_updates", True, msg.header.timestamp or None, len(msg.entity), len(rows))
         log.info("trip updates: %d rows from %d entities", len(rows), len(msg.entity))
+        return len(rows), (None if rows else feeds.route_ids_at_stops(msg, stops))
     except Exception as e:
         log.warning("trip updates failed: %s", e)
         db.log_poll(conn, now, "trip_updates", False, error=str(e)[:300])
+        return None, None
 
 
 def poll_vehicles(conn, key, route_ids, now):
@@ -65,11 +80,19 @@ def main():
     log.info("watching %d stops on %s, every %ds", len(stops), sorted(route_ids), config.POLL_SECONDS)
 
     last_weather = 0
+    last_kept = last_warned = int(time.time())
     next_run = time.time()
     while not stopping:
         now = int(time.time())
-        poll_trip_updates(conn, key, route_ids, stops, now)
+        kept, seen = poll_trip_updates(conn, key, route_ids, stops, now)
         poll_vehicles(conn, key, route_ids, now)
+        if kept:
+            last_kept = now
+        elif kept == 0 and in_service_hours(now) and now - last_kept > SILENT_AFTER_S \
+                and now - last_warned > WARN_EVERY_S:
+            last_warned = now
+            log.warning("nothing kept for %.0f hours but the feed is up. Route ids at our stops: %s. "
+                        "Filter is %s", (now - last_kept) / 3600, dict(seen), sorted(route_ids))
         if now - last_weather >= config.WEATHER_EVERY_SECONDS:
             poll_weather(conn, main_stop["lat"], main_stop["lon"], now)
             last_weather = now
