@@ -161,7 +161,7 @@ def render_case(conn, case, position, total, horizon):
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>Check results</title>
 <style>body{{font-family:sans-serif;max-width:700px;margin:2em auto;color:#222}}
-td{{padding:3px 14px 3px 0}} button{{font-size:1.1em;padding:.6em 1.2em;margin-right:.5em;cursor:pointer}}
+td{{padding:3px 14px 3px 0}} button{{font-size:1.1em;padding:.6em 1.2em;margin-right:.5em}}
 .ok{{background:#d7f0dd}} .bad{{background:#f6d6da}} small{{color:#666}}</style></head><body>
 <h2>Case {position} of {total}</h2>
 <p>{html.escape(case['stop']['name'])} ({html.escape(case['stop']['stop_code'])}), {date}, trip
