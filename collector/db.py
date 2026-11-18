@@ -52,6 +52,14 @@ CREATE TABLE IF NOT EXISTS vehicle_positions (
 );
 CREATE INDEX IF NOT EXISTS idx_vp_trip ON vehicle_positions (trip_id, start_date, polled_at);
 
+CREATE TABLE IF NOT EXISTS schedule (
+    trip_id TEXT NOT NULL,
+    stop_id TEXT NOT NULL,
+    stop_sequence INTEGER,
+    arrival_s INTEGER NOT NULL,
+    PRIMARY KEY (trip_id, stop_id)
+);
+
 CREATE TABLE IF NOT EXISTS weather (
     id INTEGER PRIMARY KEY,
     polled_at INTEGER NOT NULL,

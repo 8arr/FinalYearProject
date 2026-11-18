@@ -18,6 +18,14 @@ def main():
     if last:
         print(f"last poll          {int(time.time()) - last}s ago")
 
+    print("\nrows stored in the last 24h (0 for a whole day means the filter is not matching):")
+    since = int(time.time()) - 86400
+    for table in ("trip_updates", "vehicle_positions"):
+        n = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE polled_at > ?", (since,)).fetchone()[0]
+        newest = conn.execute(f"SELECT MAX(polled_at) FROM {table}").fetchone()[0]
+        ago = f"{(int(time.time()) - newest) / 3600:.1f}h ago" if newest else "never"
+        print(f"  {table}: {n}, newest row {ago}")
+
     print("\nfailed polls in the last 24h:")
     rows = conn.execute(
         "SELECT feed, COUNT(*) FROM polls WHERE ok = 0 AND polled_at > ? GROUP BY feed",
