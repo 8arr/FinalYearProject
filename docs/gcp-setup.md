@@ -47,10 +47,10 @@ set -a; . ./.env; set +a
 
 ## Keeping it running
 
-The unit file uses the user `ubuntu`, so swap in yours:
+The unit file assumes the user `ubuntu` and the folder `/home/ubuntu/FinalYearProject`, so swap in your own user and wherever you cloned the repo. Run this from inside the repo folder:
 
 ```
-sed "s/ubuntu/$USER/g" deploy/bus-collector.service | sudo tee /etc/systemd/system/bus-collector.service
+sed "s|/home/ubuntu/FinalYearProject|$PWD|g; s/User=ubuntu/User=$USER/" deploy/bus-collector.service | sudo tee /etc/systemd/system/bus-collector.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now bus-collector
 ```
