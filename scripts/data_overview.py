@@ -1,8 +1,10 @@
 """First look at a collected database: is the data there and does it look usable?
 
-    python scripts/data_overview.py data/bus.db
+    python scripts/data_overview.py --db data/bus.db
 """
+import argparse
 import os
+import pathlib
 import sqlite3
 import sys
 from datetime import datetime
@@ -29,8 +31,14 @@ def filled(conn, table, columns):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join("data", "bus.db")
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    parser = argparse.ArgumentParser(description="first look at a collected database")
+    parser.add_argument("path", nargs="?", help="database file, same as --db")
+    parser.add_argument("--db", default=os.path.join("data", "bus.db"))
+    args = parser.parse_args()
+    path = args.path or args.db
+    if not os.path.exists(path):
+        sys.exit(f"no database at {path}")
+    conn = sqlite3.connect(pathlib.Path(path).resolve().as_uri() + "?mode=ro", uri=True)
 
     print(f"database: {path}\n")
     first, last = conn.execute("SELECT MIN(polled_at), MAX(polled_at) FROM polls").fetchone()
